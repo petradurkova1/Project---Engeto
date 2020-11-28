@@ -1,0 +1,151 @@
+Časové proměnné
+binární proměnná pro víkend / pracovní den
+
+select date, country, 
+case when weekday (date) in (5,6) then 1 else 0 end as weekend
+from covid19_detail_global_differences cdgd
+
+;
+
+
+roční období daného dne (zakódujte prosím jako 0 až 3)
+? 
+select date, country,
+case when dayofyear (date) in () then 1 else 0 end as season
+from covid19_detail_global_differences cdgd
+;
+
+
+weekday
+dayofweek
+month, hour, dayofweek, dayofyear
+
+Proměnné specifické pro daný stát:
+hustota zalidnění - ve státech s vyšší hustotou zalidnění se nákaza může šířit rychleji
+hustota zalidnění = populace / rozloha)
+population density
+
+? 
+SELECT country,
+    round( avg(population_density), 2 ) AS simple_avg_density,
+    round( sum(surface_area*population_density) / sum(surface_area), 2 ) AS weighted_avg_density
+FROM countries c 
+WHERE population_density IS NOT NULL AND country IS NOT NULL
+inner join covid19_detail_global_differences cdgd 
+on countries.country = covid19_detail_global_differences.country
+;
+
+
+HDP na obyvatele - použijeme jako indikátor ekonomické vyspělosti státu
+? 
+
+select c.country, e.year, e.GDP, e.population,
+	max (round (e.GDP/e.population )) GDP_pc
+from countries c
+join economies e
+	on c.country =e.country 
+	group by c.continent
+order by e.GDP/e.population desc
+;
+
+
+
+GINI koeficient - má majetková nerovnost vliv na šíření koronaviru?
+
+select e.gini, e.country
+from covid19_detail_global_differences cdgd
+join economies e
+	on cdgd.country = e.country
+where e.gini is not NULL 
+
+
+dětská úmrtnost - použijeme jako indikátor kvality zdravotnictví
+
+select e.mortaliy_under5, e.country 
+from economies e 
+join covid19_detail_global_differences cdgd 
+	on e.country = cdgd.country
+	where e.mortaliy_under5 is not null
+;
+
+medián věku obyvatel v roce 2018 - státy se starším obyvatelstvem mohou být postiženy více
+
+Pro nalezení mediánu daného souboru stačí hodnoty seřadit podle velikosti a vzít hodnotu, 
+která se nalézá uprostřed seznamu bez extremnich hodnot. Pokud má soubor sudý počet prvků, 
+obvykle se za medián označuje aritmetický průměr hodnot na místech n/2 a n/2+1.
+
+SELECT c.median_age_2018, c.country
+FROM countries c 
+order by median_age_2018 DESC 
+;
+
+
+podíly jednotlivých náboženství - použijeme jako proxy proměnnou pro kulturní specifika.
+Pro každé náboženství v daném státě bych chtěl procentní podíl jeho příslušníků na celkovém obyvatelstvu
+
+
+?
+select r2.country, r2.religion, round (r2.population/r2.population_total*100. 2) as religion_share
+from religions r2
+join (
+select r.country, sum (r.population) as population_total
+from religions r 
+group by r.country) on r2.country = r.country
+;
+
+
+rozdíl mezi očekávanou dobou dožití v roce 1965 a v roce 2015 - 
+(státy, ve kterých proběhl rychlý rozvoj mohou reagovat jinak než země, 
+které jsou vyspělé už delší dobu)
+
+?
+SELECT a.country, a.life_exp_1965 , b.life_exp_2015,
+    round( b.life_exp_2015 / a.life_exp_1965, 2 ) as life_exp_ratio
+FROM (
+    SELECT le.country , le.life_expectancy as life_exp_1965
+    FROM life_expectancy le 
+    WHERE year = 1965
+    ) a JOIN (
+    SELECT le.country , le.life_expectancy as life_exp_2015
+    FROM life_expectancy le 
+    WHERE year = 2015
+    ) b
+    ON a.country = b.country
+;
+
+Počasí (ovlivňuje chování lidí a také schopnost šíření viru)
+průměrná denní (nikoli noční!) teplota - pocasi - denni hodina fitr a prumer
+
+?
+
+SELECT c.country, c.date, c.confirmed , lt.iso3 , c2.capital_city , w.avg_temp
+FROM covid19_basic as c
+JOIN lookup_table lt 
+    on c.country = lt.country 
+JOIN countries c2
+    on lt.iso3 = c2.iso3
+JOIN (  SELECT w.city , w.date , avg(w.temp) as avg_temp
+        FROM weather w 
+        GROUP BY w.city, w.date) w
+    on c2.capital_city = w.city 
+    and c.date = w.date
+ORDER BY c.date desc
+;
+
+
+počet hodin v daném dni, kdy byly srážky nenulové
+
+?
+select hour, temp <> 0
+from weather w 
+;
+
+
+maximální síla větru v nárazech během dne
+
+select city, max(wind), hour
+from weather w2 
+;
+
+
+
