@@ -1,150 +1,124 @@
-Časové proměnné
-binární proměnná pro víkend / pracovní den
-
-select date, country, 
-case when weekday (date) in (5,6) then 1 else 0 end as weekend
+create or replace (table) as t_Petra_Durkova_projekt_SQL_final as
+-- Časové proměnné
+-- binární proměnná pro víkend / pracovní den
+select cdgd.date, cdgd.country, cdgd.province,
+case when weekday(cdgd.date) in (5,6) then 1 else 0 end as weekend,
+nested_select_alias.season
 from covid19_detail_global_differences cdgd
-
-;
-
-
-roční období daného dne (zakódujte prosím jako 0 až 3)
-? 
-select date, country,
-case when dayofyear (date) in () then 1 else 0 end as season
-from covid19_detail_global_differences cdgd
-;
-
-
-weekday
-dayofweek
-month, hour, dayofweek, dayofyear
-
-Proměnné specifické pro daný stát:
-hustota zalidnění - ve státech s vyšší hustotou zalidnění se nákaza může šířit rychleji
-hustota zalidnění = populace / rozloha)
-population density
-
-? 
+join (
+-- roční období daného dne (zakódujte prosím jako 0 až 3)
+select date, country, province,
+case when month(date) in (3,4,5) then 1
+	when month(date) in (6,7,8) then 2
+	when month(date) in (9,10,11) then 3
+	else 0 end as season
+from covid19_detail_global_differences cdgd2
+) as nested_select_alias 
+on cdgd.country = nested_select_alias.country
+and cdgd.date = nested_select_alias.date
+and cdgd.province = nested_select_alias.province
+join (
+-- Proměnné specifické pro daný stát:
+-- hustota zalidnění - ve státech s vyšší hustotou zalidnění se nákaza může šířit rychleji
+-- hustota zalidnění = populace / rozloha)
+-- population density
 SELECT country,
     round( avg(population_density), 2 ) AS simple_avg_density,
     round( sum(surface_area*population_density) / sum(surface_area), 2 ) AS weighted_avg_density
-FROM countries c 
+    FROM countries c 
 WHERE population_density IS NOT NULL AND country IS NOT NULL
-inner join covid19_detail_global_differences cdgd 
-on countries.country = covid19_detail_global_differences.country
-;
-
-
-HDP na obyvatele - použijeme jako indikátor ekonomické vyspělosti státu
-? 
-
+inner join covid19_detail_global_differences cdgd ) as nested_select_alias.weighted_avg_density
+on countries.country = nested_select_alias.weighted_avg_density.country
+and covid19_detail_global_differences.country = nested_select_alias.weighted_avg_density.country
+join (
+-- HDP na obyvatele - použijeme jako indikátor ekonomické vyspělosti státu
 select c.country, e.year, e.GDP, e.population,
-	max (round (e.GDP/e.population )) GDP_pc
+	max (round (e.GDP/e.population )) as GDP_pc
 from countries c
-join economies e
-	on c.country =e.country 
+join economies e)) as nested_select_alias.GDP_pc
+	on c.country = nested_select_alias.GDP_pc
+	and e.country = nested_select_alias.GDP_pc
 	group by c.continent
 order by e.GDP/e.population desc
-;
-
-
-
-GINI koeficient - má majetková nerovnost vliv na šíření koronaviru?
-
+join (
+-- GINI koeficient - má majetková nerovnost vliv na šíření koronaviru?
 select e.gini, e.country
 from covid19_detail_global_differences cdgd
-join economies e
-	on cdgd.country = e.country
+inner join economies e) as nested_select_alias.gini
+	on cdgd.country = nested_select_alias.gini.country
+	and e.country = nested_select_alias.gini.country
 where e.gini is not NULL 
-
-
-dětská úmrtnost - použijeme jako indikátor kvality zdravotnictví
-
+-- dětská úmrtnost - použijeme jako indikátor kvality zdravotnictví
+join (
 select e.mortaliy_under5, e.country 
 from economies e 
-join covid19_detail_global_differences cdgd 
-	on e.country = cdgd.country
+join covid19_detail_global_differences cdgd )as nested_select_alias.mortality.country
+	on e.country = nested_select_alias.mortality.country
+	and cdgd.country = nested_select_alias.mortality.country
 	where e.mortaliy_under5 is not null
-;
-
-medián věku obyvatel v roce 2018 - státy se starším obyvatelstvem mohou být postiženy více
-
-Pro nalezení mediánu daného souboru stačí hodnoty seřadit podle velikosti a vzít hodnotu, 
-která se nalézá uprostřed seznamu bez extremnich hodnot. Pokud má soubor sudý počet prvků, 
-obvykle se za medián označuje aritmetický průměr hodnot na místech n/2 a n/2+1.
-
+-- medián věku obyvatel v roce 2018 - státy se starším obyvatelstvem mohou být postiženy více
+-- Pro nalezení mediánu daného souboru stačí hodnoty seřadit podle velikosti a vzít hodnotu, 
+-- která se nalézá uprostřed seznamu bez extremnich hodnot. Pokud má soubor sudý počet prvků, 
+-- obvykle se za medián označuje aritmetický průměr hodnot na místech n/2 a n/2+1.
+join(
 SELECT c.median_age_2018, c.country
-FROM countries c 
+FROM countries c ) as median
 order by median_age_2018 DESC 
-;
-
-
-podíly jednotlivých náboženství - použijeme jako proxy proměnnou pro kulturní specifika.
-Pro každé náboženství v daném státě bych chtěl procentní podíl jeho příslušníků na celkovém obyvatelstvu
-
-
-?
+on nested_select_alias.median = nested_select_alias.median
+join (
+-- podíly jednotlivých náboženství - použijeme jako proxy proměnnou pro kulturní specifika.
+-- Pro každé náboženství v daném státě bych chtěl procentní podíl jeho příslušníků na celkovém obyvatelstvu
 select r2.country, r2.religion, round (r2.population/r2.population_total*100. 2) as religion_share
 from religions r2
-join (
+inner join (
 select r.country, sum (r.population) as population_total
-from religions r 
-group by r.country) on r2.country = r.country
-;
-
-
-rozdíl mezi očekávanou dobou dožití v roce 1965 a v roce 2015 - 
-(státy, ve kterých proběhl rychlý rozvoj mohou reagovat jinak než země, 
-které jsou vyspělé už delší dobu)
-
-?
+from religions r ) as nested_select_alias.religion
+group by r.country)
+on r2.country = nested_select_alias.country
+and r.country = nested_select_alias.country
+join (
+-- rozdíl mezi očekávanou dobou dožití v roce 1965 a v roce 2015 - 
+-- (státy, ve kterých proběhl rychlý rozvoj mohou reagovat jinak než země, 
+-- které jsou vyspělé už delší dobu)
 SELECT a.country, a.life_exp_1965 , b.life_exp_2015,
     round( b.life_exp_2015 / a.life_exp_1965, 2 ) as life_exp_ratio
 FROM (
     SELECT le.country , le.life_expectancy as life_exp_1965
     FROM life_expectancy le 
-    WHERE year = 1965
-    ) a JOIN (
+    WHERE year = 1965) a 
+    inner JOIN (
     SELECT le.country , le.life_expectancy as life_exp_2015
-    FROM life_expectancy le 
-    WHERE year = 2015
-    ) b
-    ON a.country = b.country
-;
-
-Počasí (ovlivňuje chování lidí a také schopnost šíření viru)
-průměrná denní (nikoli noční!) teplota - pocasi - denni hodina fitr a prumer
-
-?
-
+    FROM life_expectancy le ) as nested_select_alias.life_exp
+    WHERE year = 2015) b
+    ON a.country = nested_select_alias.life_exp.country
+    and b.country = nested_select_alias.life_exp.country
+    
+join (
+-- Počasí (ovlivňuje chování lidí a také schopnost šíření viru)
+-- průměrná denní (nikoli noční!) teplota - pocasi - denni hodina fitr a prumer
 SELECT c.country, c.date, c.confirmed , lt.iso3 , c2.capital_city , w.avg_temp
 FROM covid19_basic as c
-JOIN lookup_table lt 
+inner JOIN lookup_table lt 
     on c.country = lt.country 
-JOIN countries c2
+inner JOIN countries c2
     on lt.iso3 = c2.iso3
-JOIN (  SELECT w.city , w.date , avg(w.temp) as avg_temp
-        FROM weather w 
+inner JOIN (  SELECT w.city , w.date , avg(w.temp) as avg_temp
+        FROM weather w ) as nested_select_alias.iso3
         GROUP BY w.city, w.date) w
-    on c2.capital_city = w.city 
+    on c2.capital_city = nested_select_alias.iso3
+    and w.city = nested_select_alias.iso3
     and c.date = w.date
 ORDER BY c.date desc
-;
-
-
-počet hodin v daném dni, kdy byly srážky nenulové
-
-?
+join (
+-- počet hodin v daném dni, kdy byly srážky nenulové
 select hour, temp <> 0
-from weather w 
-;
-
-
-maximální síla větru v nárazech během dne
-
+from weather w ) as nested_select_alias.temp
+on nested_select_alias.temp = nested_select_alias.temp
+join (
+-- maximální síla větru v nárazech během dne
 select city, max(wind), hour
-from weather w2 
+from weather w2 ) as nested_select_alias.city
+on nested_select_alias.city = nested_select_alias.city
 ;
 
 
