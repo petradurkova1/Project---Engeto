@@ -1,4 +1,4 @@
-create or replace (table) as t_Petra_Durkova_projekt_SQL_final as
+create or replace table as t_Petra_Durkova_projekt_SQL_final as
 -- Časové proměnné
 -- binární proměnná pro víkend / pracovní den
 select cdgd.date, cdgd.country, cdgd.province,
@@ -7,6 +7,7 @@ nested_select_alias.season
 from covid19_detail_global_differences cdgd
 join (
 -- roční období daného dne (zakódujte prosím jako 0 až 3)
+create or replace table t_Petra_Durkova_projekt_SQL_final_project_time as 
 select date, country, province,
 case when month(date) in (3,4,5) then 1
 	when month(date) in (6,7,8) then 2
@@ -22,6 +23,7 @@ join (
 -- hustota zalidnění - ve státech s vyšší hustotou zalidnění se nákaza může šířit rychleji
 -- hustota zalidnění = populace / rozloha)
 -- population density
+create or replace table as t_Petra_Durkova_projekt_SQL_final_population_density as
 SELECT country,
     round( avg(population_density), 2 ) AS simple_avg_density,
     round( sum(surface_area*population_density) / sum(surface_area), 2 ) AS weighted_avg_density
@@ -32,6 +34,7 @@ on countries.country = nested_select_alias.weighted_avg_density.country
 and covid19_detail_global_differences.country = nested_select_alias.weighted_avg_density.country
 join (
 -- HDP na obyvatele - použijeme jako indikátor ekonomické vyspělosti státu
+create or replace table as t_Petra_Durkova_projekt_SQL_final_GDP as
 select c.country, e.year, e.GDP, e.population,
 	max (round (e.GDP/e.population )) as GDP_pc
 from countries c
@@ -42,6 +45,7 @@ join economies e)) as nested_select_alias.GDP_pc
 order by e.GDP/e.population desc
 join (
 -- GINI koeficient - má majetková nerovnost vliv na šíření koronaviru?
+create or replace table as t_Petra_Durkova_projekt_SQL_final_gini as
 select e.gini, e.country
 from covid19_detail_global_differences cdgd
 inner join economies e) as nested_select_alias.gini
@@ -50,6 +54,7 @@ inner join economies e) as nested_select_alias.gini
 where e.gini is not NULL 
 -- dětská úmrtnost - použijeme jako indikátor kvality zdravotnictví
 join (
+create or replace table as t_Petra_Durkova_projekt_SQL_final_mortality as
 select e.mortaliy_under5, e.country 
 from economies e 
 join covid19_detail_global_differences cdgd )as nested_select_alias.mortality.country
@@ -61,6 +66,7 @@ join covid19_detail_global_differences cdgd )as nested_select_alias.mortality.co
 -- která se nalézá uprostřed seznamu bez extremnich hodnot. Pokud má soubor sudý počet prvků, 
 -- obvykle se za medián označuje aritmetický průměr hodnot na místech n/2 a n/2+1.
 join(
+create or replace table as t_Petra_Durkova_projekt_SQL_final_median as
 SELECT c.median_age_2018, c.country
 FROM countries c ) as median
 order by median_age_2018 DESC 
@@ -68,6 +74,7 @@ on nested_select_alias.median = nested_select_alias.median
 join (
 -- podíly jednotlivých náboženství - použijeme jako proxy proměnnou pro kulturní specifika.
 -- Pro každé náboženství v daném státě bych chtěl procentní podíl jeho příslušníků na celkovém obyvatelstvu
+create or replace table as t_Petra_Durkova_projekt_SQL_final_religion as
 select r2.country, r2.religion, round (r2.population/r2.population_total*100. 2) as religion_share
 from religions r2
 inner join (
@@ -80,22 +87,24 @@ join (
 -- rozdíl mezi očekávanou dobou dožití v roce 1965 a v roce 2015 - 
 -- (státy, ve kterých proběhl rychlý rozvoj mohou reagovat jinak než země, 
 -- které jsou vyspělé už delší dobu)
-SELECT a.country, a.life_exp_1965 , b.life_exp_2015,
-    round( b.life_exp_2015 / a.life_exp_1965, 2 ) as life_exp_ratio
+create or replace table t_Petra_Durkova_projekt_SQL_final_lifeexp as
+SELECT a.country,
+    b.life_exp_2015 - a.life_exp_1965 as life_exp_difference
 FROM (
     SELECT le.country , le.life_expectancy as life_exp_1965
     FROM life_expectancy le 
-    WHERE year = 1965) a 
-    inner JOIN (
+    WHERE year = 1965
+    	and life_expectancy is not null) as a 
+JOIN (
     SELECT le.country , le.life_expectancy as life_exp_2015
-    FROM life_expectancy le ) as nested_select_alias.life_exp
-    WHERE year = 2015) b
-    ON a.country = nested_select_alias.life_exp.country
-    and b.country = nested_select_alias.life_exp.country
-    
+    FROM life_expectancy le
+    WHERE year = 2015
+    	and life_expectancy is not null) as b
+ON a.country = b.country 
 join (
 -- Počasí (ovlivňuje chování lidí a také schopnost šíření viru)
 -- průměrná denní (nikoli noční!) teplota - pocasi - denni hodina fitr a prumer
+create or replace table as t_Petra_Durkova_projekt_SQL_final_avg_temp as
 SELECT c.country, c.date, c.confirmed , lt.iso3 , c2.capital_city , w.avg_temp
 FROM covid19_basic as c
 inner JOIN lookup_table lt 
@@ -111,11 +120,13 @@ inner JOIN (  SELECT w.city , w.date , avg(w.temp) as avg_temp
 ORDER BY c.date desc
 join (
 -- počet hodin v daném dni, kdy byly srážky nenulové
+create or replace table as t_Petra_Durkova_projekt_SQL_final_temp_not_null as
 select hour, temp <> 0
 from weather w ) as nested_select_alias.temp
 on nested_select_alias.temp = nested_select_alias.temp
 join (
 -- maximální síla větru v nárazech během dne
+create or replace table as t_Petra_Durkova_projekt_SQL_final_wind as
 select city, max(wind), hour
 from weather w2 ) as nested_select_alias.city
 on nested_select_alias.city = nested_select_alias.city
