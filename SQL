@@ -131,6 +131,3 @@ select city, max(wind), hour
 from weather w2 ) as nested_select_alias.city
 on nested_select_alias.city = nested_select_alias.city
 ;
-
-
-
