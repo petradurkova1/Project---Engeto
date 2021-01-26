@@ -30,8 +30,8 @@ import sqlalchemy
 student_conn_string = "mysql+pymysql://student:p7@vw7MCatmnKjy7@data.engeto.com/data"
 alchemy_conn = sqlalchemy.create_engine(student_conn_string)
 
-select * 
-from edinburgh_bikes
+query = """select * from edinburgh_bikes"""
+lookup_df = pd.read_sql(query, alchemy_conn)
 
 
 
