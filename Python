@@ -34,5 +34,3 @@ query = """select * from edinburgh_bikes"""
 lookup_df = pd.read_sql(query, alchemy_conn)
 
 
-
-
